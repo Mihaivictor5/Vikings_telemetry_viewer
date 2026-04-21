@@ -267,3 +267,11 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
     </div>
   );
 }
+
+function MapBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="pointer-events-none absolute left-2 top-2 z-[400] rounded-sm border border-border bg-popover/85 px-2 py-0.5 font-mono-tabular text-[10px] uppercase tracking-widest text-muted-foreground backdrop-blur">
+      {children}
+    </div>
+  );
+}
