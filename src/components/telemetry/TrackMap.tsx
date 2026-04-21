@@ -178,3 +178,72 @@ export function TrackMap({
     </div>
   );
 }
+
+// Maximum reasonable distance (meters) between two consecutive samples.
+// Logger runs at ~50 Hz; even at 200 km/h that's ~1.1 m/sample. 50 m is a
+// generous threshold that still cuts off any GNSS jump glitch.
+const MAX_JUMP_M = 50;
+
+function haversineMeters(a: L.LatLngTuple, b: L.LatLngTuple): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b[0] - a[0]);
+  const dLon = toRad(b[1] - a[1]);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+function isValidCoord(lat: number, lon: number): boolean {
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lon) &&
+    lat !== 0 &&
+    lon !== 0 &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lon) <= 180
+  );
+}
+
+/**
+ * Build polyline segments from telemetry samples, breaking the line when a
+ * sample is invalid or jumps more than MAX_JUMP_M from the previous one.
+ * Leaflet renders an array of arrays as multiple disconnected segments.
+ */
+function buildSegments(
+  samples: TelemetrySample[],
+  latKey: string,
+  lonKey: string,
+  startIdx = 0,
+  endIdx = samples.length - 1
+): L.LatLngTuple[][] {
+  const segments: L.LatLngTuple[][] = [];
+  let current: L.LatLngTuple[] = [];
+  let prev: L.LatLngTuple | null = null;
+
+  const flush = () => {
+    if (current.length >= 2) segments.push(current);
+    current = [];
+  };
+
+  for (let i = startIdx; i <= endIdx; i++) {
+    const s = samples[i];
+    if (!s) continue;
+    const lat = s.v[latKey];
+    const lon = s.v[lonKey];
+    if (!isValidCoord(lat, lon)) {
+      flush();
+      prev = null;
+      continue;
+    }
+    const pt: L.LatLngTuple = [lat, lon];
+    if (prev && haversineMeters(prev, pt) > MAX_JUMP_M) {
+      flush();
+    }
+    current.push(pt);
+    prev = pt;
+  }
+  flush();
+  return segments;
+}
