@@ -57,6 +57,21 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        surface: {
+          1: "hsl(var(--surface-1))",
+          2: "hsl(var(--surface-2))",
+          3: "hsl(var(--surface-3))",
+        },
+        chan: {
+          1: "hsl(var(--chan-1))",
+          2: "hsl(var(--chan-2))",
+          3: "hsl(var(--chan-3))",
+          4: "hsl(var(--chan-4))",
+          5: "hsl(var(--chan-5))",
+          6: "hsl(var(--chan-6))",
+          7: "hsl(var(--chan-7))",
+          8: "hsl(var(--chan-8))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
