@@ -115,6 +115,35 @@ export function detectLaps(
         }
       }
     }
+
+    // Count brake events: rising edges where any brake channel goes from
+    // below threshold to above. Add a small hysteresis + minimum gap to avoid
+    // double-counting noise around the threshold.
+    let brakeCount = 0;
+    if (brakeKeys.length) {
+      const onLevel = brakeThreshold;
+      const offLevel = Math.max(1, brakeThreshold - 2);
+      let onBrake = false;
+      let lastOnTs = -Infinity;
+      const minGapSec = 0.25;
+      for (let k = startIdx; k <= endIdx; k++) {
+        let pressure = 0;
+        for (const bk of brakeKeys) {
+          const v = samples[k].v[bk];
+          if (Number.isFinite(v) && v > pressure) pressure = v;
+        }
+        if (!onBrake && pressure >= onLevel) {
+          if (samples[k].ts - lastOnTs >= minGapSec) {
+            brakeCount++;
+            lastOnTs = samples[k].ts;
+          }
+          onBrake = true;
+        } else if (onBrake && pressure <= offLevel) {
+          onBrake = false;
+        }
+      }
+    }
+
     laps.push({
       index: i + 1,
       startIdx,
@@ -124,6 +153,7 @@ export function detectLaps(
       duration: endTs - startTs,
       maxSpeed: max,
       avgSpeed: count ? sum / count : 0,
+      brakeCount,
     });
   }
   return laps;
