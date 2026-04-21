@@ -8,7 +8,7 @@ import { LiveStats } from "./LiveStats";
 import { detectLaps, formatLapTime } from "@/lib/telemetry/laps";
 import type { Lap, TelemetryDataset } from "@/lib/telemetry/types";
 
-type CoordSource = "INS" | "GNSS" | "BOTH";
+type CoordSource = "INS" | "GNSS" | "FUSED" | "BOTH";
 
 interface Props {
   ds: TelemetryDataset;
