@@ -175,30 +175,47 @@ export function TelemetryViewer({ ds, onReset }: Props) {
               <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
                 Track Map
               </span>
-              <div className="flex rounded-sm border border-border bg-surface-2 p-0.5">
-                {(["INS", "GNSS", "FUSED", "BOTH"] as const).map((opt) => (
+              <div className="flex items-center gap-1.5">
+                {hasAltitude && (
                   <button
-                    key={opt}
-                    onClick={() => setCoordSource(opt)}
+                    onClick={() => setColorByAltitude((v) => !v)}
+                    title="Color the track by altitude"
                     className={[
-                      "rounded-[3px] px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest transition-colors",
-                      coordSource === opt
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground",
+                      "flex items-center gap-1 rounded-sm border px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest transition-colors",
+                      colorByAltitude
+                        ? "border-chan-3 bg-chan-3/15 text-chan-3"
+                        : "border-border bg-surface-2 text-muted-foreground hover:text-foreground",
                     ].join(" ")}
-                    title={
-                      opt === "INS"
-                        ? "Onboard INS fusion (logger output)"
-                        : opt === "GNSS"
-                        ? "Raw GNSS positions"
-                        : opt === "FUSED"
-                        ? "IMU + GPS complementary fusion (computed)"
-                        : "Side-by-side comparison"
-                    }
                   >
-                    {opt === "INS" ? "INS" : opt === "GNSS" ? "GNSS" : opt === "FUSED" ? "IMU+GPS" : "Split"}
+                    <Mountain className="h-3 w-3" />
+                    Alt
                   </button>
-                ))}
+                )}
+                <div className="flex rounded-sm border border-border bg-surface-2 p-0.5">
+                  {(["INS", "GNSS", "FUSED", "BOTH"] as const).map((opt) => (
+                    <button
+                      key={opt}
+                      onClick={() => setCoordSource(opt)}
+                      className={[
+                        "rounded-[3px] px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest transition-colors",
+                        coordSource === opt
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      ].join(" ")}
+                      title={
+                        opt === "INS"
+                          ? "Onboard INS fusion (logger output)"
+                          : opt === "GNSS"
+                          ? "Raw GNSS positions"
+                          : opt === "FUSED"
+                          ? "IMU + GPS complementary fusion (computed)"
+                          : "Side-by-side comparison"
+                      }
+                    >
+                      {opt === "INS" ? "INS" : opt === "GNSS" ? "GNSS" : opt === "FUSED" ? "IMU+GPS" : "Split"}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="relative flex-1">
@@ -217,6 +234,7 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                       }}
                       startLinePickMode={pickMode}
                       source="INS"
+                      colorByAltitude={colorByAltitude}
                     />
                     <MapBadge>INS · fused</MapBadge>
                   </div>
@@ -233,6 +251,7 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                       }}
                       startLinePickMode={pickMode}
                       source="GNSS"
+                      colorByAltitude={colorByAltitude}
                     />
                     <MapBadge>GNSS · raw</MapBadge>
                   </div>
@@ -250,6 +269,7 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                   }}
                   startLinePickMode={pickMode}
                   source={coordSource}
+                  colorByAltitude={colorByAltitude}
                 />
               )}
             </div>
