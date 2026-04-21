@@ -39,12 +39,12 @@ export function TrackMap({
     if (source === "FUSED") {
       const gnssLat = ds.channels.find(c => c.source === "gINS.input.gnssPosLat")?.key;
       const gnssLon = ds.channels.find(c => c.source === "gINS.input.gnssPosLon")?.key;
-      const accX = ds.channels.find(c => c.source === "gINS.input.accX")?.key;
-      const accY = ds.channels.find(c => c.source === "gINS.input.accY")?.key;
-      if (!gnssLat || !gnssLon || !accX || !accY) {
+      const velX = ds.channels.find(c => c.source === "gINS.input.velX")?.key;
+      const velY = ds.channels.find(c => c.source === "gINS.input.velY")?.key;
+      if (!gnssLat || !gnssLon || !velX || !velY) {
         return { effectiveSamples: ds.samples, latKey: undefined, lonKey: undefined };
       }
-      const fused = fuseImuGps(ds.samples, { gnssLat, gnssLon, accX, accY });
+      const fused = fuseImuGps(ds.samples, { gnssLat, gnssLon, velX, velY });
       // Build an index mapping ts -> fused lat/lon, then synthesize samples
       // that align 1:1 with the original (so lap indices still work).
       const lk = "__fusedLat";
