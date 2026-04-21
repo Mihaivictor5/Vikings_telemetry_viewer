@@ -27,6 +27,7 @@ export function TrackMap({
   onSetStartLine,
   startLinePickMode,
   source,
+  colorByAltitude = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
