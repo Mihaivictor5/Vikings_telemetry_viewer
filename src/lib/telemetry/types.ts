@@ -44,6 +44,7 @@ export interface Lap {
   duration: number; // seconds
   maxSpeed: number;
   avgSpeed: number;
+  brakeCount: number; // distinct brake applications in this lap
 }
 
 export interface TelemetryDataset {
