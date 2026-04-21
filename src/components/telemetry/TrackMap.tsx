@@ -33,16 +33,47 @@ export function TrackMap({
   const carMarkerRef = useRef<L.CircleMarker | null>(null);
   const startMarkerRef = useRef<L.Marker | null>(null);
 
-  const latKey = source === "INS" ? ds.latKey : ds.channels.find(c => c.source === "gINS.input.gnssPosLat")?.key;
-  const lonKey = source === "INS" ? ds.lonKey : ds.channels.find(c => c.source === "gINS.input.gnssPosLon")?.key;
+  // For FUSED mode we synthesize a samples array from the IMU+GPS fusion.
+  // Otherwise we just look up channels on the original samples.
+  const { effectiveSamples, latKey, lonKey } = useMemo(() => {
+    if (source === "FUSED") {
+      const gnssLat = ds.channels.find(c => c.source === "gINS.input.gnssPosLat")?.key;
+      const gnssLon = ds.channels.find(c => c.source === "gINS.input.gnssPosLon")?.key;
+      const accX = ds.channels.find(c => c.source === "gINS.input.accX")?.key;
+      const accY = ds.channels.find(c => c.source === "gINS.input.accY")?.key;
+      if (!gnssLat || !gnssLon || !accX || !accY) {
+        return { effectiveSamples: ds.samples, latKey: undefined, lonKey: undefined };
+      }
+      const fused = fuseImuGps(ds.samples, { gnssLat, gnssLon, accX, accY });
+      // Build an index mapping ts -> fused lat/lon, then synthesize samples
+      // that align 1:1 with the original (so lap indices still work).
+      const lk = "__fusedLat";
+      const lnk = "__fusedLon";
+      const map = new Map<number, { lat: number; lon: number }>();
+      for (const p of fused) map.set(p.ts, p);
+      let last: { lat: number; lon: number } | null = null;
+      const synth: TelemetrySample[] = ds.samples.map((s) => {
+        const p = map.get(s.ts) ?? last;
+        if (p) last = p;
+        return {
+          ...s,
+          v: { ...s.v, [lk]: p?.lat ?? NaN, [lnk]: p?.lon ?? NaN },
+        };
+      });
+      return { effectiveSamples: synth, latKey: lk, lonKey: lnk };
+    }
+    const lk = source === "INS" ? ds.latKey : ds.channels.find(c => c.source === "gINS.input.gnssPosLat")?.key;
+    const lnk = source === "INS" ? ds.lonKey : ds.channels.find(c => c.source === "gINS.input.gnssPosLon")?.key;
+    return { effectiveSamples: ds.samples, latKey: lk, lonKey: lnk };
+  }, [ds, source]);
 
   // Build the track as multiple segments. We split whenever the GPS sample
   // is invalid (NaN / zero) or when consecutive samples jump more than a sane
   // distance — this prevents stray "lines to infinity" from brief GNSS glitches.
   const segments = useMemo(() => {
     if (!latKey || !lonKey) return [] as L.LatLngTuple[][];
-    return buildSegments(ds.samples, latKey, lonKey);
-  }, [ds, latKey, lonKey]);
+    return buildSegments(effectiveSamples, latKey, lonKey);
+  }, [effectiveSamples, latKey, lonKey]);
 
   // Init map once
   useEffect(() => {
