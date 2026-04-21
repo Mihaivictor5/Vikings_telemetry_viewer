@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Lap, TelemetryDataset } from "@/lib/telemetry/types";
+import type { Lap, TelemetryDataset, TelemetrySample } from "@/lib/telemetry/types";
 
 interface Props {
   ds: TelemetryDataset;
@@ -35,18 +35,12 @@ export function TrackMap({
   const latKey = source === "INS" ? ds.latKey : ds.channels.find(c => c.source === "gINS.input.gnssPosLat")?.key;
   const lonKey = source === "INS" ? ds.lonKey : ds.channels.find(c => c.source === "gINS.input.gnssPosLon")?.key;
 
-  // Build full track polyline points
-  const points = useMemo(() => {
-    if (!latKey || !lonKey) return [] as L.LatLngTuple[];
-    const out: L.LatLngTuple[] = [];
-    for (const s of ds.samples) {
-      const lat = s.v[latKey];
-      const lon = s.v[lonKey];
-      if (Number.isFinite(lat) && Number.isFinite(lon) && lat !== 0 && lon !== 0) {
-        out.push([lat, lon]);
-      }
-    }
-    return out;
+  // Build the track as multiple segments. We split whenever the GPS sample
+  // is invalid (NaN / zero) or when consecutive samples jump more than a sane
+  // distance — this prevents stray "lines to infinity" from brief GNSS glitches.
+  const segments = useMemo(() => {
+    if (!latKey || !lonKey) return [] as L.LatLngTuple[][];
+    return buildSegments(ds.samples, latKey, lonKey);
   }, [ds, latKey, lonKey]);
 
   // Init map once
@@ -94,15 +88,16 @@ export function TrackMap({
     const map = mapRef.current;
     if (!map) return;
     fullPathRef.current?.remove();
-    if (points.length < 2) return;
-    const poly = L.polyline(points, {
+    if (segments.length === 0) return;
+    const poly = L.polyline(segments, {
       color: "hsl(200, 95%, 60%)",
       weight: 2,
       opacity: 0.55,
     }).addTo(map);
     fullPathRef.current = poly;
-    map.fitBounds(poly.getBounds(), { padding: [20, 20] });
-  }, [points]);
+    const bounds = poly.getBounds();
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+  }, [segments]);
 
   // Highlight selected lap
   useEffect(() => {
@@ -113,16 +108,9 @@ export function TrackMap({
     if (selectedLap == null || !latKey || !lonKey) return;
     const lap = laps.find((l) => l.index === selectedLap);
     if (!lap) return;
-    const lapPts: L.LatLngTuple[] = [];
-    for (let i = lap.startIdx; i <= lap.endIdx; i++) {
-      const lat = ds.samples[i].v[latKey];
-      const lon = ds.samples[i].v[lonKey];
-      if (Number.isFinite(lat) && Number.isFinite(lon) && lat !== 0 && lon !== 0) {
-        lapPts.push([lat, lon]);
-      }
-    }
-    if (lapPts.length > 1) {
-      lapPathRef.current = L.polyline(lapPts, {
+    const lapSegs = buildSegments(ds.samples, latKey, lonKey, lap.startIdx, lap.endIdx);
+    if (lapSegs.length > 0) {
+      lapPathRef.current = L.polyline(lapSegs, {
         color: "hsl(50, 95%, 60%)",
         weight: 3.5,
         opacity: 1,
@@ -189,4 +177,73 @@ export function TrackMap({
       )}
     </div>
   );
+}
+
+// Maximum reasonable distance (meters) between two consecutive samples.
+// Logger runs at ~50 Hz; even at 200 km/h that's ~1.1 m/sample. 50 m is a
+// generous threshold that still cuts off any GNSS jump glitch.
+const MAX_JUMP_M = 50;
+
+function haversineMeters(a: L.LatLngTuple, b: L.LatLngTuple): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b[0] - a[0]);
+  const dLon = toRad(b[1] - a[1]);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+function isValidCoord(lat: number, lon: number): boolean {
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lon) &&
+    lat !== 0 &&
+    lon !== 0 &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lon) <= 180
+  );
+}
+
+/**
+ * Build polyline segments from telemetry samples, breaking the line when a
+ * sample is invalid or jumps more than MAX_JUMP_M from the previous one.
+ * Leaflet renders an array of arrays as multiple disconnected segments.
+ */
+function buildSegments(
+  samples: TelemetrySample[],
+  latKey: string,
+  lonKey: string,
+  startIdx = 0,
+  endIdx = samples.length - 1
+): L.LatLngTuple[][] {
+  const segments: L.LatLngTuple[][] = [];
+  let current: L.LatLngTuple[] = [];
+  let prev: L.LatLngTuple | null = null;
+
+  const flush = () => {
+    if (current.length >= 2) segments.push(current);
+    current = [];
+  };
+
+  for (let i = startIdx; i <= endIdx; i++) {
+    const s = samples[i];
+    if (!s) continue;
+    const lat = s.v[latKey];
+    const lon = s.v[lonKey];
+    if (!isValidCoord(lat, lon)) {
+      flush();
+      prev = null;
+      continue;
+    }
+    const pt: L.LatLngTuple = [lat, lon];
+    if (prev && haversineMeters(prev, pt) > MAX_JUMP_M) {
+      flush();
+    }
+    current.push(pt);
+    prev = pt;
+  }
+  flush();
+  return segments;
 }
