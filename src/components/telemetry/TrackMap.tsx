@@ -14,6 +14,8 @@ interface Props {
   startLinePickMode: boolean;
   /** Which coord source */
   source: "INS" | "GNSS" | "FUSED";
+  /** Color the full path by altitude (insAlt) when available. */
+  colorByAltitude?: boolean;
 }
 
 export function TrackMap({
