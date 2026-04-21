@@ -15,8 +15,8 @@ const STAT_CHANNELS: Array<{ key: string; label: string; unit: string }> = [
   { key: "brakeFront", label: "Brake F", unit: "%" },
   { key: "brakeRear", label: "Brake R", unit: "%" },
   { key: "steerAngle", label: "Steer", unit: "°" },
-  { key: "insAlt", label: "Altitude", unit: "m" },
   { key: "packV", label: "Pack V", unit: "V" },
+  { key: "packI", label: "Pack I", unit: "A" },
   { key: "motorMaxT", label: "Motor T", unit: "°C" },
 ];
 

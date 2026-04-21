@@ -14,8 +14,6 @@ interface Props {
   startLinePickMode: boolean;
   /** Which coord source */
   source: "INS" | "GNSS" | "FUSED";
-  /** Color the full path by altitude (insAlt) when available. */
-  colorByAltitude?: boolean;
 }
 
 export function TrackMap({
@@ -27,21 +25,13 @@ export function TrackMap({
   onSetStartLine,
   startLinePickMode,
   source,
-  colorByAltitude = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const fullPathRef = useRef<L.Polyline | null>(null);
-  const altLayerRef = useRef<L.LayerGroup | null>(null);
   const lapPathRef = useRef<L.Polyline | null>(null);
   const carMarkerRef = useRef<L.CircleMarker | null>(null);
   const startMarkerRef = useRef<L.Marker | null>(null);
-
-  // Altitude channel key (always from INS regardless of map source).
-  const altKey = useMemo(
-    () => ds.channels.find((c) => c.source === "gINS.input.insPosAlt")?.key,
-    [ds]
-  );
 
   // For FUSED mode we synthesize a samples array from the IMU+GPS fusion.
   // Otherwise we just look up channels on the original samples.
@@ -125,94 +115,29 @@ export function TrackMap({
     };
   }, [startLinePickMode, onSetStartLine]);
 
-  // Compute altitude range for the gradient legend / coloring.
-  const altRange = useMemo(() => {
-    if (!altKey) return null;
-    let min = Infinity;
-    let max = -Infinity;
-    for (const s of effectiveSamples) {
-      const a = s.v[altKey];
-      if (Number.isFinite(a)) {
-        if (a < min) min = a;
-        if (a > max) max = a;
-      }
-    }
-    if (!Number.isFinite(min) || max - min < 0.1) return null;
-    return { min, max };
-  }, [effectiveSamples, altKey]);
-
-  // Draw full path. When colorByAltitude is enabled and altitude data exists,
-  // we draw many short polyline segments tinted by their average altitude.
+  // Draw full path
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    // Cleanup previous
     if (fullPathRef.current) {
       try { fullPathRef.current.remove(); } catch { /* noop */ }
       fullPathRef.current = null;
     }
-    if (altLayerRef.current) {
-      try { altLayerRef.current.remove(); } catch { /* noop */ }
-      altLayerRef.current = null;
-    }
     if (segments.length === 0) return;
-
-    let bounds: L.LatLngBounds | null = null;
-    if (colorByAltitude && altRange && altKey && latKey && lonKey) {
-      // Build colored micro-segments per pair of consecutive valid points.
-      const group = L.layerGroup().addTo(map);
-      altLayerRef.current = group;
-      let allBounds: L.LatLngBounds | null = null;
-      for (let i = 0; i < effectiveSamples.length - 1; i++) {
-        const a = effectiveSamples[i];
-        const b = effectiveSamples[i + 1];
-        if (!a || !b) continue;
-        const aLat = a.v[latKey], aLon = a.v[lonKey];
-        const bLat = b.v[latKey], bLon = b.v[lonKey];
-        if (!isValidCoord(aLat, aLon) || !isValidCoord(bLat, bLon)) continue;
-        const p1: L.LatLngTuple = [aLat, aLon];
-        const p2: L.LatLngTuple = [bLat, bLon];
-        if (haversineMeters(p1, p2) > MAX_JUMP_M) continue;
-        const altA = a.v[altKey];
-        const altB = b.v[altKey];
-        const alt = Number.isFinite(altA) && Number.isFinite(altB)
-          ? (altA + altB) / 2
-          : Number.isFinite(altA) ? altA : altB;
-        if (!Number.isFinite(alt)) continue;
-        const t = (alt - altRange.min) / (altRange.max - altRange.min);
-        const seg = L.polyline([p1, p2], {
-          color: altitudeColor(t),
-          weight: 2.5,
-          opacity: 0.9,
-          renderer: L.svg(),
-        });
-        seg.addTo(group);
-        const segB = seg.getBounds();
-        allBounds = allBounds ? allBounds.extend(segB) : segB;
-      }
-      bounds = allBounds;
-    } else {
-      const poly = L.polyline(segments, {
-        color: "hsl(265, 70%, 65%)",
-        weight: 2,
-        opacity: 0.55,
-        renderer: L.svg(),
-      }).addTo(map);
-      fullPathRef.current = poly;
-      bounds = poly.getBounds();
-    }
-    if (bounds && bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+    const poly = L.polyline(segments, {
+      color: "hsl(265, 70%, 65%)",
+      weight: 2,
+      opacity: 0.55,
+      renderer: L.svg(),
+    }).addTo(map);
+    fullPathRef.current = poly;
+    const bounds = poly.getBounds();
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
     return () => {
-      if (fullPathRef.current) {
-        try { fullPathRef.current.remove(); } catch { /* noop */ }
-        fullPathRef.current = null;
-      }
-      if (altLayerRef.current) {
-        try { altLayerRef.current.remove(); } catch { /* noop */ }
-        altLayerRef.current = null;
-      }
+      try { poly.remove(); } catch { /* noop */ }
+      if (fullPathRef.current === poly) fullPathRef.current = null;
     };
-  }, [segments, colorByAltitude, altRange, altKey, latKey, lonKey, effectiveSamples]);
+  }, [segments]);
 
   // Highlight selected lap
   useEffect(() => {
@@ -297,45 +222,8 @@ export function TrackMap({
           Click on the map to set start/finish line
         </div>
       )}
-      {colorByAltitude && altRange && (
-        <div className="pointer-events-none absolute bottom-2 right-2 z-[400] flex items-center gap-2 rounded-sm border border-border bg-popover/85 px-2 py-1 font-mono-tabular text-[10px] text-muted-foreground backdrop-blur">
-          <span className="text-foreground">{altRange.min.toFixed(0)}m</span>
-          <div
-            className="h-2 w-24 rounded-sm"
-            style={{
-              background:
-                "linear-gradient(to right, hsl(220,80%,55%), hsl(180,70%,55%), hsl(120,70%,55%), hsl(45,100%,55%), hsl(15,90%,55%))",
-            }}
-          />
-          <span className="text-foreground">{altRange.max.toFixed(0)}m</span>
-          <span className="ml-1 uppercase tracking-widest">alt</span>
-        </div>
-      )}
     </div>
   );
-}
-
-/** Map t in [0,1] to a perceptually-OK altitude color (blue → cyan → green → gold → orange). */
-function altitudeColor(t: number): string {
-  const x = Math.max(0, Math.min(1, t));
-  // 5 stops: blue, cyan, green, gold, orange
-  const stops = [
-    { h: 220, s: 80, l: 55 },
-    { h: 180, s: 70, l: 55 },
-    { h: 120, s: 70, l: 55 },
-    { h: 45, s: 100, l: 55 },
-    { h: 15, s: 90, l: 55 },
-  ];
-  const idx = x * (stops.length - 1);
-  const i = Math.floor(idx);
-  const f = idx - i;
-  const a = stops[i];
-  const b = stops[Math.min(stops.length - 1, i + 1)];
-  // Hue can wrap, but our hues all in same direction so plain lerp is fine here.
-  const h = a.h + (b.h - a.h) * f;
-  const s = a.s + (b.s - a.s) * f;
-  const l = a.l + (b.l - a.l) * f;
-  return `hsl(${h.toFixed(1)}, ${s.toFixed(1)}%, ${l.toFixed(1)}%)`;
 }
 
 // Maximum reasonable distance (meters) between two consecutive samples.

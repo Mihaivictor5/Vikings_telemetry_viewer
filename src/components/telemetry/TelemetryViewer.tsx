@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Mountain, Plus, RotateCcw, Upload } from "lucide-react";
+import { Activity, Plus, RotateCcw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChartPanel } from "./ChartPanel";
 import { TrackMap } from "./TrackMap";
 import { LapTable } from "./LapTable";
 import { LiveStats } from "./LiveStats";
-import { ElevationProfile } from "./ElevationProfile";
 import { detectLaps, formatLapTime } from "@/lib/telemetry/laps";
 import type { Lap, TelemetryDataset } from "@/lib/telemetry/types";
 
@@ -34,13 +33,6 @@ export function TelemetryViewer({ ds, onReset }: Props) {
   const [cursorTs, setCursorTs] = useState<number | null>(null);
   const [panels, setPanels] = useState<PanelConfig[]>(DEFAULT_PANELS);
   const [coordSource, setCoordSource] = useState<CoordSource>("INS");
-  const [colorByAltitude, setColorByAltitude] = useState(false);
-
-  const altKey = useMemo(
-    () => ds.channels.find((c) => c.source === "gINS.input.insPosAlt")?.key,
-    [ds]
-  );
-  const hasAltitude = !!altKey;
 
   // Filter defaults to only include channels that actually exist
   useEffect(() => {
@@ -166,18 +158,6 @@ export function TelemetryViewer({ ds, onReset }: Props) {
               lapMarkers={selectedLap == null ? lapMarkers : []}
             />
           ))}
-          {hasAltitude && (
-            <ElevationProfile
-              samples={ds.samples}
-              altKey={altKey}
-              latKey={ds.latKey}
-              lonKey={ds.lonKey}
-              startIdx={startIdx}
-              endIdx={endIdx}
-              cursorTs={cursorTs}
-              onCursorChange={setCursorTs}
-            />
-          )}
         </div>
 
         {/* Right: map + laps */}
@@ -188,21 +168,6 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                 Track Map
               </span>
               <div className="flex items-center gap-1.5">
-                {hasAltitude && (
-                  <button
-                    onClick={() => setColorByAltitude((v) => !v)}
-                    title="Color the track by altitude"
-                    className={[
-                      "flex items-center gap-1 rounded-sm border px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest transition-colors",
-                      colorByAltitude
-                        ? "border-chan-3 bg-chan-3/15 text-chan-3"
-                        : "border-border bg-surface-2 text-muted-foreground hover:text-foreground",
-                    ].join(" ")}
-                  >
-                    <Mountain className="h-3 w-3" />
-                    Alt
-                  </button>
-                )}
                 <div className="flex rounded-sm border border-border bg-surface-2 p-0.5">
                   {(["INS", "GNSS", "FUSED", "BOTH"] as const).map((opt) => (
                     <button
@@ -246,7 +211,6 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                       }}
                       startLinePickMode={pickMode}
                       source="INS"
-                      colorByAltitude={colorByAltitude}
                     />
                     <MapBadge>INS · fused</MapBadge>
                   </div>
@@ -263,7 +227,6 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                       }}
                       startLinePickMode={pickMode}
                       source="GNSS"
-                      colorByAltitude={colorByAltitude}
                     />
                     <MapBadge>GNSS · raw</MapBadge>
                   </div>
@@ -281,7 +244,6 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                   }}
                   startLinePickMode={pickMode}
                   source={coordSource}
-                  colorByAltitude={colorByAltitude}
                 />
               )}
             </div>
