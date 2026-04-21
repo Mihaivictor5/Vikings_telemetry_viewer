@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, Plus, RotateCcw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChartPanel } from "./ChartPanel";
 import { TrackMap } from "./TrackMap";
 import { LapTable } from "./LapTable";
 import { LiveStats } from "./LiveStats";
 import { detectLaps, formatLapTime } from "@/lib/telemetry/laps";
 import type { Lap, TelemetryDataset } from "@/lib/telemetry/types";
+
+type CoordSource = "INS" | "GNSS" | "BOTH";
 
 interface Props {
   ds: TelemetryDataset;
@@ -31,7 +32,7 @@ export function TelemetryViewer({ ds, onReset }: Props) {
   const [selectedLap, setSelectedLap] = useState<number | null>(null);
   const [cursorTs, setCursorTs] = useState<number | null>(null);
   const [panels, setPanels] = useState<PanelConfig[]>(DEFAULT_PANELS);
-  const [coordSource, setCoordSource] = useState<"INS" | "GNSS">("INS");
+  const [coordSource, setCoordSource] = useState<CoordSource>("INS");
 
   // Filter defaults to only include channels that actually exist
   useEffect(() => {
@@ -166,30 +167,74 @@ export function TelemetryViewer({ ds, onReset }: Props) {
               <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
                 Track Map
               </span>
-              <Select value={coordSource} onValueChange={(v) => setCoordSource(v as "INS" | "GNSS")}>
-                <SelectTrigger className="h-7 w-32 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="INS" className="text-xs">INS (fused)</SelectItem>
-                  <SelectItem value="GNSS" className="text-xs">GNSS only</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex rounded-sm border border-border bg-surface-2 p-0.5">
+                {(["INS", "GNSS", "BOTH"] as const).map((opt) => (
+                  <button
+                    key={opt}
+                    onClick={() => setCoordSource(opt)}
+                    className={[
+                      "rounded-[3px] px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest transition-colors",
+                      coordSource === opt
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    ].join(" ")}
+                  >
+                    {opt === "INS" ? "Fused" : opt === "GNSS" ? "GNSS" : "Split"}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="relative flex-1">
-              <TrackMap
-                ds={ds}
-                laps={laps}
-                selectedLap={selectedLap}
-                cursorTs={cursorTs}
-                startLine={startLine}
-                onSetStartLine={(p) => {
-                  setStartLine(p);
-                  setPickMode(false);
-                }}
-                startLinePickMode={pickMode}
-                source={coordSource}
-              />
+              {coordSource === "BOTH" ? (
+                <div className="absolute inset-0 grid grid-cols-2 gap-px bg-border">
+                  <div className="relative bg-surface-1">
+                    <TrackMap
+                      ds={ds}
+                      laps={laps}
+                      selectedLap={selectedLap}
+                      cursorTs={cursorTs}
+                      startLine={startLine}
+                      onSetStartLine={(p) => {
+                        setStartLine(p);
+                        setPickMode(false);
+                      }}
+                      startLinePickMode={pickMode}
+                      source="INS"
+                    />
+                    <MapBadge>INS · fused</MapBadge>
+                  </div>
+                  <div className="relative bg-surface-1">
+                    <TrackMap
+                      ds={ds}
+                      laps={laps}
+                      selectedLap={selectedLap}
+                      cursorTs={cursorTs}
+                      startLine={startLine}
+                      onSetStartLine={(p) => {
+                        setStartLine(p);
+                        setPickMode(false);
+                      }}
+                      startLinePickMode={pickMode}
+                      source="GNSS"
+                    />
+                    <MapBadge>GNSS · raw</MapBadge>
+                  </div>
+                </div>
+              ) : (
+                <TrackMap
+                  ds={ds}
+                  laps={laps}
+                  selectedLap={selectedLap}
+                  cursorTs={cursorTs}
+                  startLine={startLine}
+                  onSetStartLine={(p) => {
+                    setStartLine(p);
+                    setPickMode(false);
+                  }}
+                  startLinePickMode={pickMode}
+                  source={coordSource}
+                />
+              )}
             </div>
           </div>
           <LapTable
@@ -219,6 +264,14 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
       >
         {value}
       </span>
+    </div>
+  );
+}
+
+function MapBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="pointer-events-none absolute left-2 top-2 z-[400] rounded-sm border border-border bg-popover/85 px-2 py-0.5 font-mono-tabular text-[10px] uppercase tracking-widest text-muted-foreground backdrop-blur">
+      {children}
     </div>
   );
 }
