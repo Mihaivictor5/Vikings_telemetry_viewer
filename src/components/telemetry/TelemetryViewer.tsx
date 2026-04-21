@@ -34,6 +34,13 @@ export function TelemetryViewer({ ds, onReset }: Props) {
   const [cursorTs, setCursorTs] = useState<number | null>(null);
   const [panels, setPanels] = useState<PanelConfig[]>(DEFAULT_PANELS);
   const [coordSource, setCoordSource] = useState<CoordSource>("INS");
+  const [colorByAltitude, setColorByAltitude] = useState(false);
+
+  const altKey = useMemo(
+    () => ds.channels.find((c) => c.source === "gINS.input.insPosAlt")?.key,
+    [ds]
+  );
+  const hasAltitude = !!altKey;
 
   // Filter defaults to only include channels that actually exist
   useEffect(() => {
