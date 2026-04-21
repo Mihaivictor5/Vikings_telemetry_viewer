@@ -39,12 +39,12 @@ export function TrackMap({
     if (source === "FUSED") {
       const gnssLat = ds.channels.find(c => c.source === "gINS.input.gnssPosLat")?.key;
       const gnssLon = ds.channels.find(c => c.source === "gINS.input.gnssPosLon")?.key;
-      const accX = ds.channels.find(c => c.source === "gINS.input.accX")?.key;
-      const accY = ds.channels.find(c => c.source === "gINS.input.accY")?.key;
-      if (!gnssLat || !gnssLon || !accX || !accY) {
+      const velX = ds.channels.find(c => c.source === "gINS.input.velX")?.key;
+      const velY = ds.channels.find(c => c.source === "gINS.input.velY")?.key;
+      if (!gnssLat || !gnssLon || !velX || !velY) {
         return { effectiveSamples: ds.samples, latKey: undefined, lonKey: undefined };
       }
-      const fused = fuseImuGps(ds.samples, { gnssLat, gnssLon, accX, accY });
+      const fused = fuseImuGps(ds.samples, { gnssLat, gnssLon, velX, velY });
       // Build an index mapping ts -> fused lat/lon, then synthesize samples
       // that align 1:1 with the original (so lap indices still work).
       const lk = "__fusedLat";
@@ -79,7 +79,7 @@ export function TrackMap({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const map = L.map(containerRef.current, {
-      preferCanvas: true,
+      preferCanvas: false,
       zoomControl: true,
       attributionControl: true,
     }).setView([0, 0], 2);
@@ -119,35 +119,50 @@ export function TrackMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    fullPathRef.current?.remove();
+    if (fullPathRef.current) {
+      try { fullPathRef.current.remove(); } catch { /* noop */ }
+      fullPathRef.current = null;
+    }
     if (segments.length === 0) return;
     const poly = L.polyline(segments, {
       color: "hsl(200, 95%, 60%)",
       weight: 2,
       opacity: 0.55,
+      renderer: L.svg(),
     }).addTo(map);
     fullPathRef.current = poly;
     const bounds = poly.getBounds();
     if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+    return () => {
+      try { poly.remove(); } catch { /* noop */ }
+      if (fullPathRef.current === poly) fullPathRef.current = null;
+    };
   }, [segments]);
 
   // Highlight selected lap
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    lapPathRef.current?.remove();
-    lapPathRef.current = null;
+    if (lapPathRef.current) {
+      try { lapPathRef.current.remove(); } catch { /* noop */ }
+      lapPathRef.current = null;
+    }
     if (selectedLap == null || !latKey || !lonKey) return;
     const lap = laps.find((l) => l.index === selectedLap);
     if (!lap) return;
     const lapSegs = buildSegments(effectiveSamples, latKey, lonKey, lap.startIdx, lap.endIdx);
-    if (lapSegs.length > 0) {
-      lapPathRef.current = L.polyline(lapSegs, {
-        color: "hsl(50, 95%, 60%)",
-        weight: 3.5,
-        opacity: 1,
-      }).addTo(map);
-    }
+    if (lapSegs.length === 0) return;
+    const poly = L.polyline(lapSegs, {
+      color: "hsl(50, 95%, 60%)",
+      weight: 3.5,
+      opacity: 1,
+      renderer: L.svg(),
+    }).addTo(map);
+    lapPathRef.current = poly;
+    return () => {
+      try { poly.remove(); } catch { /* noop */ }
+      if (lapPathRef.current === poly) lapPathRef.current = null;
+    };
   }, [selectedLap, laps, effectiveSamples, latKey, lonKey]);
 
   // Car cursor
