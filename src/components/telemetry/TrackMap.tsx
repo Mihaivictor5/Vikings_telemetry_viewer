@@ -181,7 +181,7 @@ export function TrackMap({
     } else {
       carMarkerRef.current.setLatLng([lat, lon]);
     }
-  }, [cursorTs, ds, latKey, lonKey]);
+  }, [cursorTs, effectiveSamples, latKey, lonKey]);
 
   // Start line marker
   useEffect(() => {
