@@ -35,18 +35,12 @@ export function TrackMap({
   const latKey = source === "INS" ? ds.latKey : ds.channels.find(c => c.source === "gINS.input.gnssPosLat")?.key;
   const lonKey = source === "INS" ? ds.lonKey : ds.channels.find(c => c.source === "gINS.input.gnssPosLon")?.key;
 
-  // Build full track polyline points
-  const points = useMemo(() => {
-    if (!latKey || !lonKey) return [] as L.LatLngTuple[];
-    const out: L.LatLngTuple[] = [];
-    for (const s of ds.samples) {
-      const lat = s.v[latKey];
-      const lon = s.v[lonKey];
-      if (Number.isFinite(lat) && Number.isFinite(lon) && lat !== 0 && lon !== 0) {
-        out.push([lat, lon]);
-      }
-    }
-    return out;
+  // Build the track as multiple segments. We split whenever the GPS sample
+  // is invalid (NaN / zero) or when consecutive samples jump more than a sane
+  // distance — this prevents stray "lines to infinity" from brief GNSS glitches.
+  const segments = useMemo(() => {
+    if (!latKey || !lonKey) return [] as L.LatLngTuple[][];
+    return buildSegments(ds.samples, latKey, lonKey);
   }, [ds, latKey, lonKey]);
 
   // Init map once
@@ -94,15 +88,16 @@ export function TrackMap({
     const map = mapRef.current;
     if (!map) return;
     fullPathRef.current?.remove();
-    if (points.length < 2) return;
-    const poly = L.polyline(points, {
+    if (segments.length === 0) return;
+    const poly = L.polyline(segments, {
       color: "hsl(200, 95%, 60%)",
       weight: 2,
       opacity: 0.55,
     }).addTo(map);
     fullPathRef.current = poly;
-    map.fitBounds(poly.getBounds(), { padding: [20, 20] });
-  }, [points]);
+    const bounds = poly.getBounds();
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+  }, [segments]);
 
   // Highlight selected lap
   useEffect(() => {
@@ -113,16 +108,9 @@ export function TrackMap({
     if (selectedLap == null || !latKey || !lonKey) return;
     const lap = laps.find((l) => l.index === selectedLap);
     if (!lap) return;
-    const lapPts: L.LatLngTuple[] = [];
-    for (let i = lap.startIdx; i <= lap.endIdx; i++) {
-      const lat = ds.samples[i].v[latKey];
-      const lon = ds.samples[i].v[lonKey];
-      if (Number.isFinite(lat) && Number.isFinite(lon) && lat !== 0 && lon !== 0) {
-        lapPts.push([lat, lon]);
-      }
-    }
-    if (lapPts.length > 1) {
-      lapPathRef.current = L.polyline(lapPts, {
+    const lapSegs = buildSegments(ds.samples, latKey, lonKey, lap.startIdx, lap.endIdx);
+    if (lapSegs.length > 0) {
+      lapPathRef.current = L.polyline(lapSegs, {
         color: "hsl(50, 95%, 60%)",
         weight: 3.5,
         opacity: 1,
