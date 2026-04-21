@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Lap, TelemetryDataset, TelemetrySample } from "@/lib/telemetry/types";
+import { fuseImuGps } from "@/lib/telemetry/fusion";
 
 interface Props {
   ds: TelemetryDataset;
@@ -12,7 +13,7 @@ interface Props {
   onSetStartLine?: (p: { lat: number; lon: number }) => void;
   startLinePickMode: boolean;
   /** Which coord source */
-  source: "INS" | "GNSS";
+  source: "INS" | "GNSS" | "FUSED";
 }
 
 export function TrackMap({
