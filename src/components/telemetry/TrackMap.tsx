@@ -125,29 +125,94 @@ export function TrackMap({
     };
   }, [startLinePickMode, onSetStartLine]);
 
-  // Draw full path
+  // Compute altitude range for the gradient legend / coloring.
+  const altRange = useMemo(() => {
+    if (!altKey) return null;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const s of effectiveSamples) {
+      const a = s.v[altKey];
+      if (Number.isFinite(a)) {
+        if (a < min) min = a;
+        if (a > max) max = a;
+      }
+    }
+    if (!Number.isFinite(min) || max - min < 0.1) return null;
+    return { min, max };
+  }, [effectiveSamples, altKey]);
+
+  // Draw full path. When colorByAltitude is enabled and altitude data exists,
+  // we draw many short polyline segments tinted by their average altitude.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    // Cleanup previous
     if (fullPathRef.current) {
       try { fullPathRef.current.remove(); } catch { /* noop */ }
       fullPathRef.current = null;
     }
+    if (altLayerRef.current) {
+      try { altLayerRef.current.remove(); } catch { /* noop */ }
+      altLayerRef.current = null;
+    }
     if (segments.length === 0) return;
-    const poly = L.polyline(segments, {
-      color: "hsl(265, 70%, 65%)",
-      weight: 2,
-      opacity: 0.55,
-      renderer: L.svg(),
-    }).addTo(map);
-    fullPathRef.current = poly;
-    const bounds = poly.getBounds();
-    if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+
+    let bounds: L.LatLngBounds | null = null;
+    if (colorByAltitude && altRange && altKey && latKey && lonKey) {
+      // Build colored micro-segments per pair of consecutive valid points.
+      const group = L.layerGroup().addTo(map);
+      altLayerRef.current = group;
+      let allBounds: L.LatLngBounds | null = null;
+      for (let i = 0; i < effectiveSamples.length - 1; i++) {
+        const a = effectiveSamples[i];
+        const b = effectiveSamples[i + 1];
+        if (!a || !b) continue;
+        const aLat = a.v[latKey], aLon = a.v[lonKey];
+        const bLat = b.v[latKey], bLon = b.v[lonKey];
+        if (!isValidCoord(aLat, aLon) || !isValidCoord(bLat, bLon)) continue;
+        const p1: L.LatLngTuple = [aLat, aLon];
+        const p2: L.LatLngTuple = [bLat, bLon];
+        if (haversineMeters(p1, p2) > MAX_JUMP_M) continue;
+        const altA = a.v[altKey];
+        const altB = b.v[altKey];
+        const alt = Number.isFinite(altA) && Number.isFinite(altB)
+          ? (altA + altB) / 2
+          : Number.isFinite(altA) ? altA : altB;
+        if (!Number.isFinite(alt)) continue;
+        const t = (alt - altRange.min) / (altRange.max - altRange.min);
+        const seg = L.polyline([p1, p2], {
+          color: altitudeColor(t),
+          weight: 2.5,
+          opacity: 0.9,
+          renderer: L.svg(),
+        });
+        seg.addTo(group);
+        const segB = seg.getBounds();
+        allBounds = allBounds ? allBounds.extend(segB) : segB;
+      }
+      bounds = allBounds;
+    } else {
+      const poly = L.polyline(segments, {
+        color: "hsl(265, 70%, 65%)",
+        weight: 2,
+        opacity: 0.55,
+        renderer: L.svg(),
+      }).addTo(map);
+      fullPathRef.current = poly;
+      bounds = poly.getBounds();
+    }
+    if (bounds && bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
     return () => {
-      try { poly.remove(); } catch { /* noop */ }
-      if (fullPathRef.current === poly) fullPathRef.current = null;
+      if (fullPathRef.current) {
+        try { fullPathRef.current.remove(); } catch { /* noop */ }
+        fullPathRef.current = null;
+      }
+      if (altLayerRef.current) {
+        try { altLayerRef.current.remove(); } catch { /* noop */ }
+        altLayerRef.current = null;
+      }
     };
-  }, [segments]);
+  }, [segments, colorByAltitude, altRange, altKey, latKey, lonKey, effectiveSamples]);
 
   // Highlight selected lap
   useEffect(() => {
