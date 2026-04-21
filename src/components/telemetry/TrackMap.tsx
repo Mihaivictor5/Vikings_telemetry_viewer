@@ -140,7 +140,7 @@ export function TrackMap({
     if (selectedLap == null || !latKey || !lonKey) return;
     const lap = laps.find((l) => l.index === selectedLap);
     if (!lap) return;
-    const lapSegs = buildSegments(ds.samples, latKey, lonKey, lap.startIdx, lap.endIdx);
+    const lapSegs = buildSegments(effectiveSamples, latKey, lonKey, lap.startIdx, lap.endIdx);
     if (lapSegs.length > 0) {
       lapPathRef.current = L.polyline(lapSegs, {
         color: "hsl(50, 95%, 60%)",
@@ -148,7 +148,7 @@ export function TrackMap({
         opacity: 1,
       }).addTo(map);
     }
-  }, [selectedLap, laps, ds, latKey, lonKey]);
+  }, [selectedLap, laps, effectiveSamples, latKey, lonKey]);
 
   // Car cursor
   useEffect(() => {
@@ -160,13 +160,13 @@ export function TrackMap({
       return;
     }
     // binary search
-    let lo = 0, hi = ds.samples.length - 1;
+    let lo = 0, hi = effectiveSamples.length - 1;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (ds.samples[mid].ts < cursorTs) lo = mid + 1;
+      if (effectiveSamples[mid].ts < cursorTs) lo = mid + 1;
       else hi = mid;
     }
-    const s = ds.samples[lo];
+    const s = effectiveSamples[lo];
     const lat = s?.v[latKey];
     const lon = s?.v[lonKey];
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
