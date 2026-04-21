@@ -297,8 +297,45 @@ export function TrackMap({
           Click on the map to set start/finish line
         </div>
       )}
+      {colorByAltitude && altRange && (
+        <div className="pointer-events-none absolute bottom-2 right-2 z-[400] flex items-center gap-2 rounded-sm border border-border bg-popover/85 px-2 py-1 font-mono-tabular text-[10px] text-muted-foreground backdrop-blur">
+          <span className="text-foreground">{altRange.min.toFixed(0)}m</span>
+          <div
+            className="h-2 w-24 rounded-sm"
+            style={{
+              background:
+                "linear-gradient(to right, hsl(220,80%,55%), hsl(180,70%,55%), hsl(120,70%,55%), hsl(45,100%,55%), hsl(15,90%,55%))",
+            }}
+          />
+          <span className="text-foreground">{altRange.max.toFixed(0)}m</span>
+          <span className="ml-1 uppercase tracking-widest">alt</span>
+        </div>
+      )}
     </div>
   );
+}
+
+/** Map t in [0,1] to a perceptually-OK altitude color (blue → cyan → green → gold → orange). */
+function altitudeColor(t: number): string {
+  const x = Math.max(0, Math.min(1, t));
+  // 5 stops: blue, cyan, green, gold, orange
+  const stops = [
+    { h: 220, s: 80, l: 55 },
+    { h: 180, s: 70, l: 55 },
+    { h: 120, s: 70, l: 55 },
+    { h: 45, s: 100, l: 55 },
+    { h: 15, s: 90, l: 55 },
+  ];
+  const idx = x * (stops.length - 1);
+  const i = Math.floor(idx);
+  const f = idx - i;
+  const a = stops[i];
+  const b = stops[Math.min(stops.length - 1, i + 1)];
+  // Hue can wrap, but our hues all in same direction so plain lerp is fine here.
+  const h = a.h + (b.h - a.h) * f;
+  const s = a.s + (b.s - a.s) * f;
+  const l = a.l + (b.l - a.l) * f;
+  return `hsl(${h.toFixed(1)}, ${s.toFixed(1)}%, ${l.toFixed(1)}%)`;
 }
 
 // Maximum reasonable distance (meters) between two consecutive samples.
