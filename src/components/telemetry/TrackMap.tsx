@@ -14,8 +14,6 @@ interface Props {
   startLinePickMode: boolean;
   /** Which coord source */
   source: "INS" | "GNSS" | "FUSED";
-  /** Color the full path by altitude (insAlt) when available. */
-  colorByAltitude?: boolean;
 }
 
 export function TrackMap({
@@ -27,21 +25,13 @@ export function TrackMap({
   onSetStartLine,
   startLinePickMode,
   source,
-  colorByAltitude = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const fullPathRef = useRef<L.Polyline | null>(null);
-  const altLayerRef = useRef<L.LayerGroup | null>(null);
   const lapPathRef = useRef<L.Polyline | null>(null);
   const carMarkerRef = useRef<L.CircleMarker | null>(null);
   const startMarkerRef = useRef<L.Marker | null>(null);
-
-  // Altitude channel key (always from INS regardless of map source).
-  const altKey = useMemo(
-    () => ds.channels.find((c) => c.source === "gINS.input.insPosAlt")?.key,
-    [ds]
-  );
 
   // For FUSED mode we synthesize a samples array from the IMU+GPS fusion.
   // Otherwise we just look up channels on the original samples.
