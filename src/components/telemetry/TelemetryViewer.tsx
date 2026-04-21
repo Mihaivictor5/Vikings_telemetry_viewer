@@ -211,7 +211,6 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                       }}
                       startLinePickMode={pickMode}
                       source="INS"
-                      colorByAltitude={colorByAltitude}
                     />
                     <MapBadge>INS · fused</MapBadge>
                   </div>
@@ -228,7 +227,6 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                       }}
                       startLinePickMode={pickMode}
                       source="GNSS"
-                      colorByAltitude={colorByAltitude}
                     />
                     <MapBadge>GNSS · raw</MapBadge>
                   </div>
@@ -246,7 +244,6 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                   }}
                   startLinePickMode={pickMode}
                   source={coordSource}
-                  colorByAltitude={colorByAltitude}
                 />
               )}
             </div>
