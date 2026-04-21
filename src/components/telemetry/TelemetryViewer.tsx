@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, Plus, RotateCcw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChartPanel } from "./ChartPanel";
 import { TrackMap } from "./TrackMap";
 import { LapTable } from "./LapTable";
 import { LiveStats } from "./LiveStats";
 import { detectLaps, formatLapTime } from "@/lib/telemetry/laps";
 import type { Lap, TelemetryDataset } from "@/lib/telemetry/types";
+
+type CoordSource = "INS" | "GNSS" | "BOTH";
 
 interface Props {
   ds: TelemetryDataset;
