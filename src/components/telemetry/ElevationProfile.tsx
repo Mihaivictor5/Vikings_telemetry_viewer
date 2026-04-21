@@ -82,7 +82,7 @@ export function ElevationProfile({
   }, [samples, altKey, latKey, lonKey, startIdx, endIdx]);
 
   const path = useMemo(() => {
-    if (!data) return "";
+    if (!data) return { stroke: "", fill: "" };
     const { pts, minAlt, span, totalDist } = data;
     const totalD = Math.max(1, totalDist);
     const innerW = W - PAD_L - PAD_R;
