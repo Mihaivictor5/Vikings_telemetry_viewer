@@ -1,4 +1,4 @@
-import { Flag, MapPin } from "lucide-react";
+import { Flag, MapPin, CircleDot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatLapTime } from "@/lib/telemetry/laps";
 import type { Lap } from "@/lib/telemetry/types";
