@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Plus, RotateCcw, Upload } from "lucide-react";
+import { Activity, Mountain, Plus, RotateCcw, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChartPanel } from "./ChartPanel";
 import { TrackMap } from "./TrackMap";
 import { LapTable } from "./LapTable";
 import { LiveStats } from "./LiveStats";
+import { ElevationProfile } from "./ElevationProfile";
 import { detectLaps, formatLapTime } from "@/lib/telemetry/laps";
 import type { Lap, TelemetryDataset } from "@/lib/telemetry/types";
 
