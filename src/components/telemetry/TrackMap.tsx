@@ -125,7 +125,7 @@ export function TrackMap({
     }
     if (segments.length === 0) return;
     const poly = L.polyline(segments, {
-      color: "hsl(200, 95%, 60%)",
+      color: "hsl(265, 70%, 65%)",
       weight: 2,
       opacity: 0.55,
       renderer: L.svg(),
@@ -153,7 +153,7 @@ export function TrackMap({
     const lapSegs = buildSegments(effectiveSamples, latKey, lonKey, lap.startIdx, lap.endIdx);
     if (lapSegs.length === 0) return;
     const poly = L.polyline(lapSegs, {
-      color: "hsl(50, 95%, 60%)",
+      color: "hsl(45, 100%, 55%)",
       weight: 3.5,
       opacity: 1,
       renderer: L.svg(),
@@ -189,7 +189,7 @@ export function TrackMap({
       carMarkerRef.current = L.circleMarker([lat, lon], {
         radius: 6,
         color: "hsl(0, 0%, 100%)",
-        fillColor: "hsl(350, 85%, 62%)",
+        fillColor: "hsl(45, 100%, 55%)",
         fillOpacity: 1,
         weight: 2,
       }).addTo(map);
