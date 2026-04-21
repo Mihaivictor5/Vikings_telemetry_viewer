@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Lap, TelemetryDataset, TelemetrySample } from "@/lib/telemetry/types";
+import { fuseImuGps } from "@/lib/telemetry/fusion";
 
 interface Props {
   ds: TelemetryDataset;
@@ -12,7 +13,7 @@ interface Props {
   onSetStartLine?: (p: { lat: number; lon: number }) => void;
   startLinePickMode: boolean;
   /** Which coord source */
-  source: "INS" | "GNSS";
+  source: "INS" | "GNSS" | "FUSED";
 }
 
 export function TrackMap({
@@ -32,16 +33,47 @@ export function TrackMap({
   const carMarkerRef = useRef<L.CircleMarker | null>(null);
   const startMarkerRef = useRef<L.Marker | null>(null);
 
-  const latKey = source === "INS" ? ds.latKey : ds.channels.find(c => c.source === "gINS.input.gnssPosLat")?.key;
-  const lonKey = source === "INS" ? ds.lonKey : ds.channels.find(c => c.source === "gINS.input.gnssPosLon")?.key;
+  // For FUSED mode we synthesize a samples array from the IMU+GPS fusion.
+  // Otherwise we just look up channels on the original samples.
+  const { effectiveSamples, latKey, lonKey } = useMemo(() => {
+    if (source === "FUSED") {
+      const gnssLat = ds.channels.find(c => c.source === "gINS.input.gnssPosLat")?.key;
+      const gnssLon = ds.channels.find(c => c.source === "gINS.input.gnssPosLon")?.key;
+      const accX = ds.channels.find(c => c.source === "gINS.input.accX")?.key;
+      const accY = ds.channels.find(c => c.source === "gINS.input.accY")?.key;
+      if (!gnssLat || !gnssLon || !accX || !accY) {
+        return { effectiveSamples: ds.samples, latKey: undefined, lonKey: undefined };
+      }
+      const fused = fuseImuGps(ds.samples, { gnssLat, gnssLon, accX, accY });
+      // Build an index mapping ts -> fused lat/lon, then synthesize samples
+      // that align 1:1 with the original (so lap indices still work).
+      const lk = "__fusedLat";
+      const lnk = "__fusedLon";
+      const map = new Map<number, { lat: number; lon: number }>();
+      for (const p of fused) map.set(p.ts, p);
+      let last: { lat: number; lon: number } | null = null;
+      const synth: TelemetrySample[] = ds.samples.map((s) => {
+        const p = map.get(s.ts) ?? last;
+        if (p) last = p;
+        return {
+          ...s,
+          v: { ...s.v, [lk]: p?.lat ?? NaN, [lnk]: p?.lon ?? NaN },
+        };
+      });
+      return { effectiveSamples: synth, latKey: lk, lonKey: lnk };
+    }
+    const lk = source === "INS" ? ds.latKey : ds.channels.find(c => c.source === "gINS.input.gnssPosLat")?.key;
+    const lnk = source === "INS" ? ds.lonKey : ds.channels.find(c => c.source === "gINS.input.gnssPosLon")?.key;
+    return { effectiveSamples: ds.samples, latKey: lk, lonKey: lnk };
+  }, [ds, source]);
 
   // Build the track as multiple segments. We split whenever the GPS sample
   // is invalid (NaN / zero) or when consecutive samples jump more than a sane
   // distance — this prevents stray "lines to infinity" from brief GNSS glitches.
   const segments = useMemo(() => {
     if (!latKey || !lonKey) return [] as L.LatLngTuple[][];
-    return buildSegments(ds.samples, latKey, lonKey);
-  }, [ds, latKey, lonKey]);
+    return buildSegments(effectiveSamples, latKey, lonKey);
+  }, [effectiveSamples, latKey, lonKey]);
 
   // Init map once
   useEffect(() => {
@@ -108,7 +140,7 @@ export function TrackMap({
     if (selectedLap == null || !latKey || !lonKey) return;
     const lap = laps.find((l) => l.index === selectedLap);
     if (!lap) return;
-    const lapSegs = buildSegments(ds.samples, latKey, lonKey, lap.startIdx, lap.endIdx);
+    const lapSegs = buildSegments(effectiveSamples, latKey, lonKey, lap.startIdx, lap.endIdx);
     if (lapSegs.length > 0) {
       lapPathRef.current = L.polyline(lapSegs, {
         color: "hsl(50, 95%, 60%)",
@@ -116,7 +148,7 @@ export function TrackMap({
         opacity: 1,
       }).addTo(map);
     }
-  }, [selectedLap, laps, ds, latKey, lonKey]);
+  }, [selectedLap, laps, effectiveSamples, latKey, lonKey]);
 
   // Car cursor
   useEffect(() => {
@@ -128,13 +160,13 @@ export function TrackMap({
       return;
     }
     // binary search
-    let lo = 0, hi = ds.samples.length - 1;
+    let lo = 0, hi = effectiveSamples.length - 1;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (ds.samples[mid].ts < cursorTs) lo = mid + 1;
+      if (effectiveSamples[mid].ts < cursorTs) lo = mid + 1;
       else hi = mid;
     }
-    const s = ds.samples[lo];
+    const s = effectiveSamples[lo];
     const lat = s?.v[latKey];
     const lon = s?.v[lonKey];
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
@@ -149,7 +181,7 @@ export function TrackMap({
     } else {
       carMarkerRef.current.setLatLng([lat, lon]);
     }
-  }, [cursorTs, ds, latKey, lonKey]);
+  }, [cursorTs, effectiveSamples, latKey, lonKey]);
 
   // Start line marker
   useEffect(() => {

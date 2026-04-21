@@ -8,7 +8,7 @@ import { LiveStats } from "./LiveStats";
 import { detectLaps, formatLapTime } from "@/lib/telemetry/laps";
 import type { Lap, TelemetryDataset } from "@/lib/telemetry/types";
 
-type CoordSource = "INS" | "GNSS" | "BOTH";
+type CoordSource = "INS" | "GNSS" | "FUSED" | "BOTH";
 
 interface Props {
   ds: TelemetryDataset;
@@ -168,7 +168,7 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                 Track Map
               </span>
               <div className="flex rounded-sm border border-border bg-surface-2 p-0.5">
-                {(["INS", "GNSS", "BOTH"] as const).map((opt) => (
+                {(["INS", "GNSS", "FUSED", "BOTH"] as const).map((opt) => (
                   <button
                     key={opt}
                     onClick={() => setCoordSource(opt)}
@@ -178,8 +178,17 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                         ? "bg-primary text-primary-foreground"
                         : "text-muted-foreground hover:text-foreground",
                     ].join(" ")}
+                    title={
+                      opt === "INS"
+                        ? "Onboard INS fusion (logger output)"
+                        : opt === "GNSS"
+                        ? "Raw GNSS positions"
+                        : opt === "FUSED"
+                        ? "IMU + GPS complementary fusion (computed)"
+                        : "Side-by-side comparison"
+                    }
                   >
-                    {opt === "INS" ? "Fused" : opt === "GNSS" ? "GNSS" : "Split"}
+                    {opt === "INS" ? "INS" : opt === "GNSS" ? "GNSS" : opt === "FUSED" ? "IMU+GPS" : "Split"}
                   </button>
                 ))}
               </div>
