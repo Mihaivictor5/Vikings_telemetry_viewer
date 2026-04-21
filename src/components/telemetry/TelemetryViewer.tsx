@@ -166,6 +166,18 @@ export function TelemetryViewer({ ds, onReset }: Props) {
               lapMarkers={selectedLap == null ? lapMarkers : []}
             />
           ))}
+          {hasAltitude && (
+            <ElevationProfile
+              samples={ds.samples}
+              altKey={altKey}
+              latKey={ds.latKey}
+              lonKey={ds.lonKey}
+              startIdx={startIdx}
+              endIdx={endIdx}
+              cursorTs={cursorTs}
+              onCursorChange={setCursorTs}
+            />
+          )}
         </div>
 
         {/* Right: map + laps */}
