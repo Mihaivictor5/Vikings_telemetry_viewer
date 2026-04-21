@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Lap, TelemetryDataset } from "@/lib/telemetry/types";
+import type { Lap, TelemetryDataset, TelemetrySample } from "@/lib/telemetry/types";
 
 interface Props {
   ds: TelemetryDataset;
