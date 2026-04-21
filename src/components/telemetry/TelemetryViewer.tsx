@@ -158,18 +158,6 @@ export function TelemetryViewer({ ds, onReset }: Props) {
               lapMarkers={selectedLap == null ? lapMarkers : []}
             />
           ))}
-          {hasAltitude && (
-            <ElevationProfile
-              samples={ds.samples}
-              altKey={altKey}
-              latKey={ds.latKey}
-              lonKey={ds.lonKey}
-              startIdx={startIdx}
-              endIdx={endIdx}
-              cursorTs={cursorTs}
-              onCursorChange={setCursorTs}
-            />
-          )}
         </div>
 
         {/* Right: map + laps */}
@@ -180,21 +168,6 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                 Track Map
               </span>
               <div className="flex items-center gap-1.5">
-                {hasAltitude && (
-                  <button
-                    onClick={() => setColorByAltitude((v) => !v)}
-                    title="Color the track by altitude"
-                    className={[
-                      "flex items-center gap-1 rounded-sm border px-2 py-0.5 text-[10px] font-medium uppercase tracking-widest transition-colors",
-                      colorByAltitude
-                        ? "border-chan-3 bg-chan-3/15 text-chan-3"
-                        : "border-border bg-surface-2 text-muted-foreground hover:text-foreground",
-                    ].join(" ")}
-                  >
-                    <Mountain className="h-3 w-3" />
-                    Alt
-                  </button>
-                )}
                 <div className="flex rounded-sm border border-border bg-surface-2 p-0.5">
                   {(["INS", "GNSS", "FUSED", "BOTH"] as const).map((opt) => (
                     <button
