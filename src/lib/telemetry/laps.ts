@@ -21,17 +21,6 @@ export interface LapDetectionOptions {
   minLapDistanceM?: number;
   /** Minimum lap duration in seconds. */
   minLapSeconds?: number;
-}
-
-export interface LapDetectionOptions {
-  /** Manual start position. If omitted, auto = first valid GPS sample. */
-  start?: { lat: number; lon: number };
-  /** Radius (m) around start to consider as crossing. */
-  thresholdM?: number;
-  /** Minimum distance (m) car must travel away before a new crossing counts. */
-  minLapDistanceM?: number;
-  /** Minimum lap duration in seconds. */
-  minLapSeconds?: number;
   /** Brake pressure (%) above which the driver is considered "on the brakes". */
   brakeThreshold?: number;
 }
@@ -40,12 +29,18 @@ export function detectLaps(
   ds: TelemetryDataset,
   opts: LapDetectionOptions = {}
 ): Lap[] {
-  const { latKey, lonKey, speedKey, samples } = ds;
+  const { latKey, lonKey, speedKey, samples, channels } = ds;
   if (!latKey || !lonKey || samples.length < 2) return [];
 
   const threshold = opts.thresholdM ?? 15;
   const minLapDist = opts.minLapDistanceM ?? 80;
   const minLapSec = opts.minLapSeconds ?? 15;
+  const brakeThreshold = opts.brakeThreshold ?? 5; // %
+
+  // Find brake channel keys (front + rear, whichever exist)
+  const brakeKeys = channels
+    .filter((c) => c.group === "Brakes")
+    .map((c) => c.key);
 
   // Find first valid coord
   let firstIdx = -1;
