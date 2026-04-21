@@ -23,6 +23,19 @@ export interface LapDetectionOptions {
   minLapSeconds?: number;
 }
 
+export interface LapDetectionOptions {
+  /** Manual start position. If omitted, auto = first valid GPS sample. */
+  start?: { lat: number; lon: number };
+  /** Radius (m) around start to consider as crossing. */
+  thresholdM?: number;
+  /** Minimum distance (m) car must travel away before a new crossing counts. */
+  minLapDistanceM?: number;
+  /** Minimum lap duration in seconds. */
+  minLapSeconds?: number;
+  /** Brake pressure (%) above which the driver is considered "on the brakes". */
+  brakeThreshold?: number;
+}
+
 export function detectLaps(
   ds: TelemetryDataset,
   opts: LapDetectionOptions = {}
