@@ -79,7 +79,7 @@ export function TrackMap({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const map = L.map(containerRef.current, {
-      preferCanvas: true,
+      preferCanvas: false,
       zoomControl: true,
       attributionControl: true,
     }).setView([0, 0], 2);
