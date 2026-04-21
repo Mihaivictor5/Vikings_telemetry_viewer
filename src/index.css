@@ -2,66 +2,68 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Vikings Telemetry — Engineering tool design system. All colors HSL. */
+/* Vikings Telemetry — SDU Vikings brand colors. All colors HSL.
+   Brand: deep black, viking gold (yellow), royal purple, white. */
 
 @layer base {
   :root {
-    /* Dark engineering theme is the default */
-    --background: 220 15% 7%;
-    --foreground: 210 20% 92%;
+    /* Near-black base inspired by team livery */
+    --background: 240 10% 5%;
+    --foreground: 45 25% 96%;
 
-    --card: 220 14% 10%;
-    --card-foreground: 210 20% 92%;
+    --card: 240 10% 8%;
+    --card-foreground: 45 25% 96%;
 
-    --popover: 220 14% 9%;
-    --popover-foreground: 210 20% 92%;
+    --popover: 240 10% 7%;
+    --popover-foreground: 45 25% 96%;
 
-    --primary: 200 95% 55%;
-    --primary-foreground: 220 15% 7%;
+    /* Primary = Viking gold (CTA color from sduvikings.dk) */
+    --primary: 45 100% 55%;
+    --primary-foreground: 240 10% 5%;
 
-    --secondary: 220 12% 16%;
-    --secondary-foreground: 210 20% 92%;
+    --secondary: 265 55% 32%;       /* Royal purple — car bodywork */
+    --secondary-foreground: 45 25% 96%;
 
-    --muted: 220 12% 14%;
-    --muted-foreground: 220 8% 58%;
+    --muted: 240 8% 13%;
+    --muted-foreground: 45 8% 65%;
 
-    --accent: 200 80% 18%;
-    --accent-foreground: 200 95% 75%;
+    --accent: 265 55% 22%;          /* Deep purple accent surface */
+    --accent-foreground: 45 100% 75%;
 
     --destructive: 0 75% 55%;
-    --destructive-foreground: 210 20% 98%;
+    --destructive-foreground: 45 25% 98%;
 
-    --border: 220 12% 18%;
-    --input: 220 12% 16%;
-    --ring: 200 95% 55%;
+    --border: 240 8% 17%;
+    --input: 240 8% 14%;
+    --ring: 45 100% 55%;
 
     --radius: 0.375rem;
 
-    /* Telemetry channel palette */
-    --chan-1: 200 95% 60%;   /* cyan-blue */
-    --chan-2: 30 95% 60%;    /* orange */
-    --chan-3: 140 70% 55%;   /* green */
-    --chan-4: 350 85% 62%;   /* red-pink */
-    --chan-5: 50 95% 60%;    /* yellow */
-    --chan-6: 280 75% 65%;   /* purple */
-    --chan-7: 170 75% 50%;   /* teal */
-    --chan-8: 15 90% 60%;    /* deep orange */
+    /* Telemetry channel palette — kept distinguishable, brand-tinted */
+    --chan-1: 45 100% 60%;    /* Viking gold */
+    --chan-2: 265 70% 65%;    /* Royal purple */
+    --chan-3: 140 70% 55%;    /* green */
+    --chan-4: 350 85% 62%;    /* red-pink */
+    --chan-5: 195 90% 60%;    /* cyan */
+    --chan-6: 25 95% 60%;     /* orange */
+    --chan-7: 170 75% 50%;    /* teal */
+    --chan-8: 300 75% 65%;    /* magenta */
 
     /* Surfaces */
-    --surface-1: 220 14% 10%;
-    --surface-2: 220 13% 13%;
-    --surface-3: 220 12% 16%;
-    --grid: 220 12% 18%;
+    --surface-1: 240 10% 8%;
+    --surface-2: 240 9% 11%;
+    --surface-3: 240 8% 14%;
+    --grid: 240 8% 17%;
 
-    /* Sidebar (unused but kept for shadcn) */
-    --sidebar-background: 220 14% 9%;
-    --sidebar-foreground: 210 20% 92%;
-    --sidebar-primary: 200 95% 55%;
-    --sidebar-primary-foreground: 220 15% 7%;
-    --sidebar-accent: 220 12% 14%;
-    --sidebar-accent-foreground: 210 20% 92%;
-    --sidebar-border: 220 12% 18%;
-    --sidebar-ring: 200 95% 55%;
+    /* Sidebar */
+    --sidebar-background: 240 10% 7%;
+    --sidebar-foreground: 45 25% 96%;
+    --sidebar-primary: 45 100% 55%;
+    --sidebar-primary-foreground: 240 10% 5%;
+    --sidebar-accent: 240 8% 13%;
+    --sidebar-accent-foreground: 45 25% 96%;
+    --sidebar-border: 240 8% 17%;
+    --sidebar-ring: 45 100% 55%;
   }
 }
 
