@@ -52,6 +52,12 @@ export function LapTable({ laps, selectedLap, onSelect, pickMode, onTogglePick }
               <th className="px-2 py-1.5 text-right font-normal">Δ Best</th>
               <th className="px-2 py-1.5 text-right font-normal">Max km/h</th>
               <th className="px-2 py-1.5 text-right font-normal">Avg</th>
+              <th className="px-2 py-1.5 text-right font-normal" title="Brake applications per lap">
+                <span className="inline-flex items-center justify-end gap-1">
+                  <CircleDot className="h-3 w-3" />
+                  Brk
+                </span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -82,6 +88,9 @@ export function LapTable({ laps, selectedLap, onSelect, pickMode, onTogglePick }
                   <td className="px-2 py-1.5 text-right">{l.maxSpeed.toFixed(1)}</td>
                   <td className="px-2 py-1.5 text-right text-muted-foreground">
                     {l.avgSpeed.toFixed(1)}
+                  </td>
+                  <td className="px-2 py-1.5 text-right">
+                    <span className="font-semibold text-primary">{l.brakeCount}</span>
                   </td>
                 </tr>
               );
