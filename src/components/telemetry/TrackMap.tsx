@@ -14,6 +14,10 @@ interface Props {
   startLinePickMode: boolean;
   /** Which coord source */
   source: "INS" | "GNSS" | "FUSED";
+  /** If set, color the track by this channel value (driver inputs). null/undefined = single color. */
+  heatmapChannel?: string | null;
+  heatmapLabel?: string;
+  heatmapUnit?: string;
 }
 
 export function TrackMap({
@@ -25,11 +29,14 @@ export function TrackMap({
   onSetStartLine,
   startLinePickMode,
   source,
+  heatmapChannel,
+  heatmapLabel,
+  heatmapUnit,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const fullPathRef = useRef<L.Polyline | null>(null);
-  const lapPathRef = useRef<L.Polyline | null>(null);
+  const fullPathRef = useRef<L.LayerGroup | null>(null);
+  const lapPathRef = useRef<L.LayerGroup | null>(null);
   const carMarkerRef = useRef<L.CircleMarker | null>(null);
   const startMarkerRef = useRef<L.Marker | null>(null);
 
@@ -45,8 +52,6 @@ export function TrackMap({
         return { effectiveSamples: ds.samples, latKey: undefined, lonKey: undefined };
       }
       const fused = fuseImuGps(ds.samples, { gnssLat, gnssLon, velX, velY });
-      // Build an index mapping ts -> fused lat/lon, then synthesize samples
-      // that align 1:1 with the original (so lap indices still work).
       const lk = "__fusedLat";
       const lnk = "__fusedLon";
       const map = new Map<number, { lat: number; lon: number }>();
@@ -67,13 +72,26 @@ export function TrackMap({
     return { effectiveSamples: ds.samples, latKey: lk, lonKey: lnk };
   }, [ds, source]);
 
-  // Build the track as multiple segments. We split whenever the GPS sample
-  // is invalid (NaN / zero) or when consecutive samples jump more than a sane
-  // distance — this prevents stray "lines to infinity" from brief GNSS glitches.
   const segments = useMemo(() => {
-    if (!latKey || !lonKey) return [] as L.LatLngTuple[][];
-    return buildSegments(effectiveSamples, latKey, lonKey);
-  }, [effectiveSamples, latKey, lonKey]);
+    if (!latKey || !lonKey) return [] as Array<{ pts: L.LatLngTuple[]; values: number[] }>;
+    return buildSegments(effectiveSamples, latKey, lonKey, heatmapChannel ?? undefined);
+  }, [effectiveSamples, latKey, lonKey, heatmapChannel]);
+
+  // Min/max for heatmap normalization across the WHOLE session (so colors are stable).
+  const heatRange = useMemo(() => {
+    if (!heatmapChannel) return null;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const s of effectiveSamples) {
+      const v = s.v[heatmapChannel];
+      if (Number.isFinite(v)) {
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return null;
+    return { min, max };
+  }, [effectiveSamples, heatmapChannel]);
 
   // Init map once
   useEffect(() => {
@@ -115,7 +133,7 @@ export function TrackMap({
     };
   }, [startLinePickMode, onSetStartLine]);
 
-  // Draw full path
+  // Draw full path (with optional heatmap coloring)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -124,22 +142,45 @@ export function TrackMap({
       fullPathRef.current = null;
     }
     if (segments.length === 0) return;
-    const poly = L.polyline(segments, {
-      color: "hsl(265, 70%, 65%)",
-      weight: 2,
-      opacity: 0.55,
-      renderer: L.svg(),
-    }).addTo(map);
-    fullPathRef.current = poly;
-    const bounds = poly.getBounds();
-    if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
-    return () => {
-      try { poly.remove(); } catch { /* noop */ }
-      if (fullPathRef.current === poly) fullPathRef.current = null;
-    };
-  }, [segments]);
+    const group = L.layerGroup().addTo(map);
+    let bounds: L.LatLngBounds | null = null;
 
-  // Highlight selected lap
+    for (const seg of segments) {
+      if (heatmapChannel && heatRange) {
+        // Render each consecutive pair as a small colored polyline.
+        for (let i = 0; i < seg.pts.length - 1; i++) {
+          const v = seg.values[i];
+          const color = heatColor((v - heatRange.min) / (heatRange.max - heatRange.min));
+          const line = L.polyline([seg.pts[i], seg.pts[i + 1]], {
+            color,
+            weight: 3,
+            opacity: 0.85,
+            renderer: L.svg(),
+          }).addTo(group);
+          const lb = line.getBounds();
+          bounds = bounds ? bounds.extend(lb) : lb;
+        }
+      } else {
+        const poly = L.polyline(seg.pts, {
+          color: "hsl(265, 70%, 65%)",
+          weight: 2,
+          opacity: 0.55,
+          renderer: L.svg(),
+        }).addTo(group);
+        const lb = poly.getBounds();
+        bounds = bounds ? bounds.extend(lb) : lb;
+      }
+    }
+
+    fullPathRef.current = group;
+    if (bounds && bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+    return () => {
+      try { group.remove(); } catch { /* noop */ }
+      if (fullPathRef.current === group) fullPathRef.current = null;
+    };
+  }, [segments, heatmapChannel, heatRange]);
+
+  // Highlight selected lap (kept simple — single accent color so it pops over the heatmap)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -150,18 +191,21 @@ export function TrackMap({
     if (selectedLap == null || !latKey || !lonKey) return;
     const lap = laps.find((l) => l.index === selectedLap);
     if (!lap) return;
-    const lapSegs = buildSegments(effectiveSamples, latKey, lonKey, lap.startIdx, lap.endIdx);
+    const lapSegs = buildSegments(effectiveSamples, latKey, lonKey, undefined, lap.startIdx, lap.endIdx);
     if (lapSegs.length === 0) return;
-    const poly = L.polyline(lapSegs, {
-      color: "hsl(45, 100%, 55%)",
-      weight: 3.5,
-      opacity: 1,
-      renderer: L.svg(),
-    }).addTo(map);
-    lapPathRef.current = poly;
+    const group = L.layerGroup().addTo(map);
+    for (const seg of lapSegs) {
+      L.polyline(seg.pts, {
+        color: "hsl(45, 100%, 55%)",
+        weight: 3.5,
+        opacity: 1,
+        renderer: L.svg(),
+      }).addTo(group);
+    }
+    lapPathRef.current = group;
     return () => {
-      try { poly.remove(); } catch { /* noop */ }
-      if (lapPathRef.current === poly) lapPathRef.current = null;
+      try { group.remove(); } catch { /* noop */ }
+      if (lapPathRef.current === group) lapPathRef.current = null;
     };
   }, [selectedLap, laps, effectiveSamples, latKey, lonKey]);
 
@@ -174,7 +218,6 @@ export function TrackMap({
       carMarkerRef.current = null;
       return;
     }
-    // binary search
     let lo = 0, hi = effectiveSamples.length - 1;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
@@ -222,13 +265,29 @@ export function TrackMap({
           Click on the map to set start/finish line
         </div>
       )}
+      {heatmapChannel && heatRange && (
+        <div className="pointer-events-none absolute bottom-2 left-2 z-[400] rounded-sm border border-border bg-popover/85 px-2 py-1.5 backdrop-blur">
+          <div className="mb-1 font-mono-tabular text-[9px] uppercase tracking-widest text-muted-foreground">
+            {heatmapLabel ?? heatmapChannel}
+            {heatmapUnit ? ` · ${heatmapUnit}` : ""}
+          </div>
+          <div
+            className="h-1.5 w-32 rounded-sm"
+            style={{
+              background:
+                "linear-gradient(to right, hsl(220, 80%, 55%), hsl(160, 70%, 50%), hsl(50, 95%, 55%), hsl(15, 90%, 55%))",
+            }}
+          />
+          <div className="mt-0.5 flex justify-between font-mono-tabular text-[9px] text-muted-foreground">
+            <span>{heatRange.min.toFixed(1)}</span>
+            <span>{heatRange.max.toFixed(1)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// Maximum reasonable distance (meters) between two consecutive samples.
-// Logger runs at ~50 Hz; even at 200 km/h that's ~1.1 m/sample. 50 m is a
-// generous threshold that still cuts off any GNSS jump glitch.
 const MAX_JUMP_M = 50;
 
 function haversineMeters(a: L.LatLngTuple, b: L.LatLngTuple): number {
@@ -254,24 +313,26 @@ function isValidCoord(lat: number, lon: number): boolean {
 }
 
 /**
- * Build polyline segments from telemetry samples, breaking the line when a
- * sample is invalid or jumps more than MAX_JUMP_M from the previous one.
- * Leaflet renders an array of arrays as multiple disconnected segments.
+ * Build polyline segments. When `valueKey` is set, also returns a parallel
+ * `values` array (one entry per point) for heatmap coloring.
  */
 function buildSegments(
   samples: TelemetrySample[],
   latKey: string,
   lonKey: string,
+  valueKey?: string,
   startIdx = 0,
   endIdx = samples.length - 1
-): L.LatLngTuple[][] {
-  const segments: L.LatLngTuple[][] = [];
-  let current: L.LatLngTuple[] = [];
+): Array<{ pts: L.LatLngTuple[]; values: number[] }> {
+  const segments: Array<{ pts: L.LatLngTuple[]; values: number[] }> = [];
+  let curPts: L.LatLngTuple[] = [];
+  let curVals: number[] = [];
   let prev: L.LatLngTuple | null = null;
 
   const flush = () => {
-    if (current.length >= 2) segments.push(current);
-    current = [];
+    if (curPts.length >= 2) segments.push({ pts: curPts, values: curVals });
+    curPts = [];
+    curVals = [];
   };
 
   for (let i = startIdx; i <= endIdx; i++) {
@@ -288,9 +349,34 @@ function buildSegments(
     if (prev && haversineMeters(prev, pt) > MAX_JUMP_M) {
       flush();
     }
-    current.push(pt);
+    curPts.push(pt);
+    curVals.push(valueKey ? s.v[valueKey] : 0);
     prev = pt;
   }
   flush();
   return segments;
+}
+
+/** Map normalized 0..1 to a perceptually-ordered blue→teal→yellow→red ramp. */
+function heatColor(t: number): string {
+  const x = Math.min(1, Math.max(0, t));
+  // 4-stop gradient
+  const stops: Array<[number, [number, number, number]]> = [
+    [0.0, [220, 80, 55]],
+    [0.33, [160, 70, 50]],
+    [0.66, [50, 95, 55]],
+    [1.0, [15, 90, 55]],
+  ];
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [t0, c0] = stops[i];
+    const [t1, c1] = stops[i + 1];
+    if (x <= t1) {
+      const f = (x - t0) / (t1 - t0);
+      const h = c0[0] + (c1[0] - c0[0]) * f;
+      const s = c0[1] + (c1[1] - c0[1]) * f;
+      const l = c0[2] + (c1[2] - c0[2]) * f;
+      return `hsl(${h.toFixed(0)}, ${s.toFixed(0)}%, ${l.toFixed(0)}%)`;
+    }
+  }
+  return "hsl(15, 90%, 55%)";
 }

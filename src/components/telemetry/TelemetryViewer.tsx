@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Plus, RotateCcw, Upload } from "lucide-react";
+import { Activity, Plus, RotateCcw, Upload, Flame, GitCompare } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ChartPanel } from "./ChartPanel";
 import { TrackMap } from "./TrackMap";
 import { LapTable } from "./LapTable";
 import { LiveStats } from "./LiveStats";
 import { detectLaps, formatLapTime } from "@/lib/telemetry/laps";
-import type { Lap, TelemetryDataset } from "@/lib/telemetry/types";
+import type { Lap, TelemetryDataset, TelemetrySample } from "@/lib/telemetry/types";
 
 type CoordSource = "INS" | "GNSS" | "FUSED" | "BOTH";
 
@@ -26,13 +34,18 @@ const DEFAULT_PANELS: PanelConfig[] = [
   { id: "p3", channels: ["steerAngle"] },
 ];
 
+/** Channels offered as heatmap sources — driver inputs only. */
+const HEATMAP_CHANNELS = ["speed", "throttle", "brakeFront", "brakeRear", "steerAngle"];
+
 export function TelemetryViewer({ ds, onReset }: Props) {
   const [startLine, setStartLine] = useState<{ lat: number; lon: number } | undefined>();
   const [pickMode, setPickMode] = useState(false);
   const [selectedLap, setSelectedLap] = useState<number | null>(null);
+  const [compareLap, setCompareLap] = useState<number | null>(null);
   const [cursorTs, setCursorTs] = useState<number | null>(null);
   const [panels, setPanels] = useState<PanelConfig[]>(DEFAULT_PANELS);
   const [coordSource, setCoordSource] = useState<CoordSource>("INS");
+  const [heatmapChannel, setHeatmapChannel] = useState<string | null>(null);
 
   // Filter defaults to only include channels that actually exist
   useEffect(() => {
@@ -49,14 +62,48 @@ export function TelemetryViewer({ ds, onReset }: Props) {
 
   const lapMarkers = useMemo(() => laps.map((l) => l.startTs), [laps]);
 
-  // View window — restrict to selected lap if any
-  const [startIdx, endIdx] = useMemo(() => {
+  // Available driver-input channels (only those present in this dataset).
+  const heatmapOptions = useMemo(() => {
+    return HEATMAP_CHANNELS
+      .map((k) => ds.channels.find((c) => c.key === k))
+      .filter((c): c is NonNullable<typeof c> => !!c);
+  }, [ds]);
+
+  const heatmapMeta = useMemo(
+    () => (heatmapChannel ? ds.channels.find((c) => c.key === heatmapChannel) : null),
+    [heatmapChannel, ds]
+  );
+
+  // Bounds the user can zoom within (full session, or active lap)
+  const [boundsStartTs, boundsEndTs] = useMemo<[number, number]>(() => {
     if (selectedLap != null) {
       const lap = laps.find((l) => l.index === selectedLap);
-      if (lap) return [lap.startIdx, lap.endIdx];
+      if (lap) return [lap.startTs, lap.endTs];
     }
-    return [0, ds.samples.length - 1];
+    if (ds.samples.length === 0) return [0, 0];
+    return [ds.samples[0].ts, ds.samples[ds.samples.length - 1].ts];
   }, [selectedLap, laps, ds]);
+
+  // Current zoom window — defaults to bounds. Reset whenever bounds change.
+  const [view, setView] = useState<[number, number]>([boundsStartTs, boundsEndTs]);
+  useEffect(() => {
+    setView([boundsStartTs, boundsEndTs]);
+  }, [boundsStartTs, boundsEndTs]);
+
+  // Build overlay samples for the compare lap (rebased to start at boundsStartTs).
+  const overlaySamples: TelemetrySample[] | null = useMemo(() => {
+    if (compareLap == null) return null;
+    if (selectedLap == null) return null; // overlay only meaningful with a primary lap selected
+    if (compareLap === selectedLap) return null;
+    const lap = laps.find((l) => l.index === compareLap);
+    if (!lap) return null;
+    const slice = ds.samples.slice(lap.startIdx, lap.endIdx + 1);
+    if (slice.length === 0) return null;
+    const t0 = slice[0].ts;
+    return slice.map((s) => ({ ...s, ts: boundsStartTs + (s.ts - t0) }));
+  }, [compareLap, selectedLap, laps, ds, boundsStartTs]);
+
+  const compareLapMeta = compareLap != null ? laps.find((l) => l.index === compareLap) : null;
 
   const bestLap = laps.length
     ? laps.reduce((b, l) => (l.duration < b.duration ? l : b), laps[0])
@@ -73,6 +120,8 @@ export function TelemetryViewer({ ds, onReset }: Props) {
   const removePanel = (id: string) => {
     setPanels((p) => p.filter((x) => x.id !== id));
   };
+
+  const onViewChange = (s: number, e: number) => setView([s, e]);
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
@@ -123,14 +172,71 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                   Lap {selectedLap} · {formatLapTime(laps.find(l => l.index === selectedLap)?.duration ?? 0)}
                 </span>
               )}
+              {compareLapMeta && (
+                <span className="ml-1 rounded-sm border border-dashed border-chan-5 px-1.5 py-0.5 font-mono-tabular text-chan-5">
+                  vs Lap {compareLapMeta.index} · {formatLapTime(compareLapMeta.duration)}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1">
+              {/* Compare-lap dropdown */}
+              {selectedLap != null && laps.length > 1 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant={compareLap != null ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                    >
+                      <GitCompare className="mr-1 h-3 w-3" />
+                      {compareLap != null ? `vs Lap ${compareLap}` : "Compare lap"}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="max-h-[50vh] overflow-y-auto">
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                      Overlay against Lap {selectedLap}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {compareLap != null && (
+                      <>
+                        <DropdownMenuItem
+                          onClick={() => setCompareLap(null)}
+                          className="text-xs text-muted-foreground"
+                        >
+                          Clear comparison
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    {laps
+                      .filter((l) => l.index !== selectedLap)
+                      .map((l) => (
+                        <DropdownMenuItem
+                          key={l.index}
+                          onClick={() => setCompareLap(l.index)}
+                          className="text-xs font-mono-tabular"
+                        >
+                          <span>Lap {l.index}</span>
+                          <span className="ml-auto text-muted-foreground">
+                            {formatLapTime(l.duration)}
+                          </span>
+                          {compareLap === l.index && (
+                            <span className="ml-2 text-primary">●</span>
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
               {selectedLap != null && (
                 <Button
                   variant="ghost"
                   size="sm"
                   className="h-7 px-2 text-xs"
-                  onClick={() => setSelectedLap(null)}
+                  onClick={() => {
+                    setSelectedLap(null);
+                    setCompareLap(null);
+                  }}
                 >
                   <RotateCcw className="mr-1 h-3 w-3" />
                   Full session
@@ -142,6 +248,9 @@ export function TelemetryViewer({ ds, onReset }: Props) {
               </Button>
             </div>
           </div>
+          <div className="text-[10px] text-muted-foreground">
+            Tip: scroll to zoom · click & drag to pan · double-click to reset
+          </div>
           {panels.map((p, i) => (
             <ChartPanel
               key={p.id}
@@ -149,13 +258,18 @@ export function TelemetryViewer({ ds, onReset }: Props) {
               channels={ds.channels}
               selected={p.channels}
               onSelectedChange={(c) => updatePanel(p.id, c)}
-              startIdx={startIdx}
-              endIdx={endIdx}
+              boundsStartTs={boundsStartTs}
+              boundsEndTs={boundsEndTs}
+              viewStartTs={view[0]}
+              viewEndTs={view[1]}
+              onViewChange={onViewChange}
               cursorTs={cursorTs}
               onCursorChange={setCursorTs}
               onRemove={panels.length > 1 ? () => removePanel(p.id) : undefined}
               title={`Panel ${i + 1}`}
               lapMarkers={selectedLap == null ? lapMarkers : []}
+              overlaySamples={overlaySamples}
+              overlayLabel={compareLapMeta ? `Lap ${compareLapMeta.index}` : undefined}
             />
           ))}
         </div>
@@ -163,11 +277,53 @@ export function TelemetryViewer({ ds, onReset }: Props) {
         {/* Right: map + laps */}
         <aside className="grid min-h-0 grid-rows-[1fr_auto] gap-2 lg:grid-rows-[1fr_320px]">
           <div className="flex min-h-[300px] flex-col rounded-md border border-border bg-surface-1">
-            <div className="flex items-center justify-between border-b border-border px-3 py-2">
+            <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
               <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
                 Track Map
               </span>
               <div className="flex items-center gap-1.5">
+                {/* Heatmap toggle */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant={heatmapChannel ? "default" : "ghost"}
+                      className="h-7 px-2 text-[10px] uppercase tracking-widest"
+                      title="Color the track by a driver-input channel"
+                    >
+                      <Flame className="mr-1 h-3 w-3" />
+                      {heatmapMeta ? heatmapMeta.label : "Heatmap"}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                      Color by
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setHeatmapChannel(null)}
+                      className="text-xs"
+                    >
+                      Off
+                      {heatmapChannel === null && <span className="ml-auto text-primary">●</span>}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    {heatmapOptions.map((c) => (
+                      <DropdownMenuItem
+                        key={c.key}
+                        onClick={() => setHeatmapChannel(c.key)}
+                        className="text-xs font-mono-tabular"
+                      >
+                        <span>{c.label}</span>
+                        {c.unit && <span className="ml-1 text-muted-foreground">[{c.unit}]</span>}
+                        {heatmapChannel === c.key && (
+                          <span className="ml-auto text-primary">●</span>
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
                 <div className="flex rounded-sm border border-border bg-surface-2 p-0.5">
                   {(["INS", "GNSS", "FUSED", "BOTH"] as const).map((opt) => (
                     <button
@@ -211,6 +367,9 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                       }}
                       startLinePickMode={pickMode}
                       source="INS"
+                      heatmapChannel={heatmapChannel}
+                      heatmapLabel={heatmapMeta?.label}
+                      heatmapUnit={heatmapMeta?.unit}
                     />
                     <MapBadge>INS · fused</MapBadge>
                   </div>
@@ -227,6 +386,9 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                       }}
                       startLinePickMode={pickMode}
                       source="GNSS"
+                      heatmapChannel={heatmapChannel}
+                      heatmapLabel={heatmapMeta?.label}
+                      heatmapUnit={heatmapMeta?.unit}
                     />
                     <MapBadge>GNSS · raw</MapBadge>
                   </div>
@@ -244,6 +406,9 @@ export function TelemetryViewer({ ds, onReset }: Props) {
                   }}
                   startLinePickMode={pickMode}
                   source={coordSource}
+                  heatmapChannel={heatmapChannel}
+                  heatmapLabel={heatmapMeta?.label}
+                  heatmapUnit={heatmapMeta?.unit}
                 />
               )}
             </div>
@@ -251,7 +416,10 @@ export function TelemetryViewer({ ds, onReset }: Props) {
           <LapTable
             laps={laps}
             selectedLap={selectedLap}
-            onSelect={setSelectedLap}
+            onSelect={(l) => {
+              setSelectedLap(l);
+              if (l == null) setCompareLap(null);
+            }}
             pickMode={pickMode}
             onTogglePick={() => setPickMode((v) => !v)}
           />
